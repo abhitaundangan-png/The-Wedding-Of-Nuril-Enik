@@ -6,6 +6,54 @@
     <title>Undangan Pernikahan - Nuril & Enik</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        // ============================================================
+        // FIREBASE CONFIGURATION
+        // ============================================================
+        // LANGKAH SETUP:
+        // 1. Buka https://console.firebase.google.com
+        // 2. Buat project baru (misal: "undangan-nuril-enik")
+        // 3. Klik ikon </> (Web App) untuk daftarkan app
+        // 4. Salin nilai config di bawah dari Firebase Console
+        // 5. Buka: Build > Realtime Database > Create Database
+        //    - Pilih region "asia-southeast1 (Singapore)"
+        //    - Mulai dalam "test mode" (bisa diatur rules nanti)
+        // ============================================================
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getDatabase, ref, push, onValue, serverTimestamp, query, orderByChild } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey:            "AIzaSyCagyL_n0ilj6lC43vfPrFa7aE0DPYD3t8",
+            authDomain:        "undangan-nuril-enik.firebaseapp.com",
+            databaseURL:       "https://undangan-nuril-enik-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId:         "undangan-nuril-enik",
+            storageBucket:     "undangan-nuril-enik.firebasestorage.app",
+            messagingSenderId: "608496774809",
+            appId:             "1:608496774809:web:272c18293dbc1c17975208"
+        };
+
+        // Inisialisasi Firebase & expose ke window agar bisa diakses di script utama
+        const app  = initializeApp(firebaseConfig);
+        const db   = getDatabase(app);
+        const rsvpRef = ref(db, 'rsvp_nuril_enik');
+
+        window._fbDb      = db;
+        window._fbRef     = rsvpRef;
+        window._fbPush    = push;
+        window._fbOnValue = onValue;
+        window._fbQuery   = query;
+        window._fbOrderBy = orderByChild;
+        window._fbTimestamp = serverTimestamp;
+        window._firebaseReady = true;
+
+        // Mulai listener real-time segera
+        onValue(rsvpRef, (snapshot) => {
+            const data = snapshot.val();
+            const list = data ? Object.values(data).reverse() : [];
+            if (window.renderRSVP) window.renderRSVP(list);
+        });
+    </script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -520,11 +568,21 @@
                     <!-- GUESTBOOK DISPLAY -->
                     <div class="lg:col-span-7 bg-white p-8 rounded-2xl shadow-xl border border-goldWarm/15 flex flex-col justify-between reveal">
                         <div>
-                            <h3 class="font-serif text-xl font-bold text-emeraldDeep mb-6"><i class="fa-regular fa-comment-dots mr-2 text-goldWarm"></i> Daftar Ucapan (<span id="ucapan-count">0</span>)</h3>
-                            
+                            <h3 class="font-serif text-xl font-bold text-emeraldDeep mb-4">
+                                <i class="fa-regular fa-comment-dots mr-2 text-goldWarm"></i> Daftar Ucapan (<span id="ucapan-count">0</span>)
+                                <!-- Indikator real-time -->
+                                <span id="realtime-badge" class="ml-2 inline-flex items-center gap-1 text-[10px] font-sans font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hidden">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span> LIVE
+                                </span>
+                            </h3>
+
                             <!-- Scrollable list of comments -->
                             <div id="comments-container" class="space-y-4 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                                <!-- Dummy Live-updated feedback items will go here -->
+                                <!-- Loading state -->
+                                <div id="rsvp-loading" class="flex flex-col items-center justify-center py-10 text-emeraldDeep/40">
+                                    <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-3 text-goldWarm"></i>
+                                    <p class="text-xs">Memuat ucapan...</p>
+                                </div>
                             </div>
                         </div>
 
@@ -747,7 +805,12 @@
             document.getElementById('form-name').value = (namaTamu !== 'Bapak/Ibu/Saudara/i') ? decodeURIComponent(namaTamu) : '';
 
             initGallery();
-            loadRSVPs();
+            // loadRSVPs() tidak dipanggil di sini karena Firebase listener sudah aktif otomatis via module
+            // Jika Firebase belum dikonfigurasi, tampilkan daftar kosong dari localStorage sebagai fallback
+            if (!window._firebaseReady) {
+                const list = JSON.parse(localStorage.getItem('wedding_rsvps_nuril_enik')) || [];
+                window.renderRSVP(list);
+            }
             startCountdown();
             setupScrollReveal();
             setupScrollSpy();
@@ -850,77 +913,129 @@
             lightbox.classList.remove('flex');
         }
 
-        // 7. GUESTBOOK & RSVP DATABASE (LOCALSTORAGE INTEGRATION)
-        const dummyGuests = [
-            { name: "Ahmad Fauzi & Keluarga", status: "Hadir", message: "Selamat menempuh hidup baru Mas Nuril Anwar & Mbak Enik Mudrikah! Semoga senantiasa diberikan keberkahan dan menjadi keluarga yang sakinah, mawaddah, warahmah.", date: "Baru saja" },
-            { name: "Siti Rahmawati", status: "Hadir", message: "Barakallahu lakuma wa baraka 'alaikuma wa jama'a bainakuma fi khair. Lancar dan sukses sampai hari H untuk Mas Nuril dan Mbak Enik!", date: "1 jam yang lalu" },
-            { name: "Dimas Arya", status: "Tidak Hadir", message: "Selamat atas pernikahannya Mas Nuril & Mbak Enik! Mohon maaf belum bisa hadir langsung, doa terbaik selalu mengalir untuk kedua mempelai.", date: "3 jam yang lalu" }
-        ];
-
-        function loadRSVPs() {
-            let list = JSON.parse(localStorage.getItem('wedding_rsvps_nuril_enik')) || [];
-            
-            if (list.length === 0) {
-                list = dummyGuests;
-                localStorage.setItem('wedding_rsvps_nuril_enik', JSON.stringify(list));
-            }
-
-            renderRSVP(list);
-        }
-
-        function renderRSVP(list) {
+        // 7. GUESTBOOK & RSVP — FIREBASE REALTIME DATABASE
+        // Expose renderRSVP ke window agar bisa dipanggil dari module Firebase
+        window.renderRSVP = function(list) {
             const container = document.getElementById('comments-container');
+            const loading   = document.getElementById('rsvp-loading');
+            const badge     = document.getElementById('realtime-badge');
+
+            if (loading) loading.remove();
+            if (badge)   badge.classList.remove('hidden');
+
             container.innerHTML = '';
             document.getElementById('ucapan-count').innerText = list.length;
 
+            if (list.length === 0) {
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-10 text-emeraldDeep/40">
+                        <i class="fa-regular fa-comment-dots text-3xl mb-3 text-goldWarm/40"></i>
+                        <p class="text-xs italic">Belum ada ucapan. Jadilah yang pertama!</p>
+                    </div>`;
+                return;
+            }
+
             list.forEach(item => {
-                const badgeColor = item.status === 'Hadir' ? 'bg-emeraldDeep text-goldWarm' : item.status === 'Ragu-ragu' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800';
-                
+                const badgeColor = item.status === 'Hadir'
+                    ? 'bg-emeraldDeep text-goldWarm'
+                    : item.status === 'Ragu-ragu'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-red-100 text-red-800';
+
+                // Format waktu dari timestamp Firebase
+                let dateLabel = 'Baru saja';
+                if (item.timestamp) {
+                    const now  = Date.now();
+                    const diff = now - item.timestamp;
+                    const mins = Math.floor(diff / 60000);
+                    const hrs  = Math.floor(diff / 3600000);
+                    const days = Math.floor(diff / 86400000);
+                    if (mins < 1)        dateLabel = 'Baru saja';
+                    else if (mins < 60)  dateLabel = `${mins} menit yang lalu`;
+                    else if (hrs < 24)   dateLabel = `${hrs} jam yang lalu`;
+                    else                 dateLabel = `${days} hari yang lalu`;
+                }
+
                 const card = document.createElement('div');
-                card.className = "p-4 rounded-xl bg-creamDark border border-goldWarm/10 space-y-2 text-left";
+                card.className = "p-4 rounded-xl bg-creamDark border border-goldWarm/10 space-y-2 text-left animate-[fadeIn_0.4s_ease]";
                 card.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <h4 class="font-serif font-bold text-emeraldDeep text-sm">${item.name}</h4>
-                        <span class="text-[10px] px-2 py-0.5 rounded-full ${badgeColor} font-sans font-semibold">${item.status}</span>
+                    <div class="flex items-center justify-between gap-2">
+                        <h4 class="font-serif font-bold text-emeraldDeep text-sm truncate">${escapeHtml(item.name)}</h4>
+                        <span class="shrink-0 text-[10px] px-2 py-0.5 rounded-full ${badgeColor} font-sans font-semibold">${escapeHtml(item.status)}</span>
                     </div>
-                    <p class="text-xs text-emeraldDeep/80 italic leading-relaxed">"${item.message}"</p>
-                    <p class="text-[9px] text-emeraldDeep/50 text-right font-sans">${item.date || 'Baru saja'}</p>
+                    <p class="text-xs text-emeraldDeep/80 italic leading-relaxed">"${escapeHtml(item.message)}"</p>
+                    <p class="text-[9px] text-emeraldDeep/50 text-right font-sans">${dateLabel}</p>
                 `;
-                container.prepend(card);
+                container.appendChild(card);
             });
+        };
+
+        // Escape HTML untuk keamanan (mencegah XSS)
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(text || ''));
+            return div.innerHTML;
         }
 
-        // Handle RSVP Form Submit
+        // Handle RSVP Form Submit — kirim ke Firebase
         document.getElementById('rsvp-form').addEventListener('submit', function(e) {
             e.preventDefault();
-            
-            const nameInput = document.getElementById('form-name').value;
-            const statusInput = document.getElementById('form-status').value;
-            const messageInput = document.getElementById('form-message').value;
+
+            const btn = this.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Mengirim...`;
+
+            const nameInput    = document.getElementById('form-name').value.trim();
+            const statusInput  = document.getElementById('form-status').value;
+            const guestsInput  = document.getElementById('form-guests').value;
+            const messageInput = document.getElementById('form-message').value.trim();
 
             const newRSVP = {
-                name: nameInput,
-                status: statusInput,
-                message: messageInput,
-                date: "Baru saja"
+                name:      nameInput,
+                status:    statusInput,
+                guests:    guestsInput,
+                message:   messageInput,
+                timestamp: Date.now()
             };
 
-            let list = JSON.parse(localStorage.getItem('wedding_rsvps_nuril_enik')) || [];
-            list.push(newRSVP);
-            localStorage.setItem('wedding_rsvps_nuril_enik', JSON.stringify(list));
+            // Cek apakah Firebase sudah siap
+            if (window._firebaseReady && window._fbPush && window._fbRef) {
+                window._fbPush(window._fbRef, newRSVP)
+                    .then(() => {
+                        document.getElementById('form-message').value = '';
+                        showToast('<i class="fa-solid fa-paper-plane mr-2"></i> Ucapan Berhasil Dikirim!');
+                        btn.disabled = false;
+                        btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-2"></i> Kirim Ucapan`;
+                    })
+                    .catch((err) => {
+                        console.error('Firebase error:', err);
+                        showToast('<i class="fa-solid fa-triangle-exclamation mr-2"></i> Gagal mengirim, coba lagi.');
+                        btn.disabled = false;
+                        btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-2"></i> Kirim Ucapan`;
+                    });
+            } else {
+                // Fallback: simpan ke localStorage jika Firebase belum dikonfigurasi
+                console.warn('Firebase belum dikonfigurasi. Menyimpan ke localStorage sementara.');
+                let list = JSON.parse(localStorage.getItem('wedding_rsvps_nuril_enik')) || [];
+                list.unshift(newRSVP);
+                localStorage.setItem('wedding_rsvps_nuril_enik', JSON.stringify(list));
+                window.renderRSVP(list);
+                document.getElementById('form-message').value = '';
+                showToast('<i class="fa-solid fa-paper-plane mr-2"></i> Ucapan Tersimpan (mode lokal)');
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-2"></i> Kirim Ucapan`;
+            }
+        });
 
-            renderRSVP(list);
-
-            document.getElementById('form-message').value = '';
-            
+        function showToast(html) {
             const toast = document.getElementById('toast');
-            toast.innerHTML = `<i class="fa-solid fa-paper-plane mr-2"></i> Ucapan Berhasil Dikirim!`;
+            toast.innerHTML = html;
             toast.classList.remove('hidden');
             setTimeout(() => {
                 toast.classList.add('hidden');
                 toast.innerHTML = `<i class="fa-solid fa-check-circle mr-2"></i> Nomor Rekening Berhasil Disalin!`;
             }, 3000);
-        });
+        }
 
         // 8. SCROLL REVEAL UTILITIES
         function setupScrollReveal() {
