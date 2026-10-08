@@ -80,7 +80,16 @@
         onValue(rsvpRef, (snapshot) => {
             const data = snapshot.val();
             const list = data ? Object.values(data).reverse() : [];
-            if (window.renderRSVP) window.renderRSVP(list);
+            window._cachedRSVPList = list;
+            if (typeof window.renderRSVP === 'function') {
+                window.renderRSVP(list);
+            }
+        }, (err) => {
+            console.error('Firebase realtime listener error (kemungkinan Rules belum diizinkan):', err);
+            window._firebaseError = err;
+            if (typeof window.handleFirebaseError === 'function') {
+                window.handleFirebaseError(err);
+            }
         });
     </script>
     <!-- Google Fonts -->
@@ -998,6 +1007,22 @@
                 container.appendChild(card);
             });
         };
+
+        // Tangani error Firebase jika security rules belum dibuka
+        window.handleFirebaseError = function(err) {
+            console.warn('Firebase error terdeteksi:', err);
+            const loading = document.getElementById('rsvp-loading');
+            if (loading) loading.remove();
+            const list = JSON.parse(localStorage.getItem('wedding_rsvps_nuril_enik')) || [];
+            window.renderRSVP(list);
+        };
+
+        // Jika data dari Firebase sudah diterima sebelum fungsi renderRSVP dibuat
+        if (window._cachedRSVPList) {
+            window.renderRSVP(window._cachedRSVPList);
+        } else if (window._firebaseError) {
+            window.handleFirebaseError(window._firebaseError);
+        }
 
         // Escape HTML untuk keamanan (mencegah XSS)
         function escapeHtml(text) {
